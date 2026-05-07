@@ -7,10 +7,11 @@ const apiKeyRoutes = require('./routes/apiKeys');
 const { authenticateApiKey } = require('./middleware/auth');
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 9999;
 
 app.use(cors());
 app.use(express.json());
+app.use(express.static('public'));
 
 // API 路由
 app.use('/api/models', modelRoutes);

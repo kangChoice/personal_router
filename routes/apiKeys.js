@@ -14,6 +14,29 @@ router.get('/', (req, res) => {
   res.json(sanitized);
 });
 
+// 日志查询端点（必须在 /:id 之前，否则 "logs" 会被当作 :id）
+router.get('/logs', (req, res) => {
+  const { apiKeyId, modelId, success, limit = 100, offset = 0 } = req.query;
+
+  let query = {};
+  if (apiKeyId) query.apiKeyId = apiKeyId;
+  if (modelId) query.modelId = modelId;
+  if (success !== undefined) query.success = success === 'true';
+
+  const logs = db.get('logs')
+    .filter(query)
+    .orderBy('createdAt', 'desc')
+    .slice(parseInt(offset), parseInt(offset) + parseInt(limit))
+    .value();
+
+  res.json({
+    total: db.get('logs').filter(query).size().value(),
+    limit: parseInt(limit),
+    offset: parseInt(offset),
+    logs
+  });
+});
+
 // 获取单个 API Key 详情（需要完整 key ID）
 router.get('/:id', (req, res) => {
   const apiKey = db.get('apiKeys').find({ id: req.params.id }).value();
@@ -118,31 +141,6 @@ router.delete('/:id', (req, res) => {
 });
 
 // =====================
-// 日志查询端点
-// =====================
-
-// 获取所有日志（支持过滤）
-router.get('/logs', (req, res) => {
-  const { apiKeyId, modelId, success, limit = 100, offset = 0 } = req.query;
-
-  let query = {};
-  if (apiKeyId) query.apiKeyId = apiKeyId;
-  if (modelId) query.modelId = modelId;
-  if (success !== undefined) query.success = success === 'true';
-
-  const logs = db.get('logs')
-    .filter(query)
-    .orderBy('createdAt', 'desc')
-    .slice(parseInt(offset), parseInt(offset) + parseInt(limit))
-    .value();
-
-  res.json({
-    total: db.get('logs').filter(query).size().value(),
-    limit: parseInt(limit),
-    offset: parseInt(offset),
-    logs
-  });
-});
 
 // 获取 API Key 的使用统计
 router.get('/:id/stats', (req, res) => {

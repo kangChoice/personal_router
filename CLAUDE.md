@@ -24,11 +24,21 @@ Server runs on `http://localhost:3000` (configurable via `PORT` env var).
 - **routes/apiKeys.js** - REST CRUD endpoints for API key management at `/api/keys`
 - **routes/proxy.js** - Proxy forwarding endpoints at `/api/proxy/:modelId/*`
 
-## Authentication
+## Authentication & Authorization
+
+### API Key Authentication
 
 All proxy requests require API Key authentication via:
 - `Authorization: Bearer <your-api-key>` or
 - `x-api-key: <your-api-key>`
+
+The `authenticateApiKey` middleware validates: key exists, enabled, not expired, and quota not exhausted. On success it attaches `req.apiKey` (id, name, models, rateLimit, quota, usedQuota).
+
+### Model-Level Access Control
+
+`requireModelAccess()` middleware (from `middleware/auth.js`) restricts which models an API key can call. If the key's `models` array is non-empty, the requested `:modelId` must be in that list — otherwise 403.
+
+Both proxy routes use `requireModelAccess()`. The model/config management routes do NOT use any auth middleware (no protection on `/api/models` or `/api/keys`).
 
 ## API Endpoints
 
@@ -68,11 +78,19 @@ All proxy requests require API Key authentication via:
 ### Logs (`/api/keys/logs`)
 - `GET /?apiKeyId=<id>&modelId=<id>&success=<true|false>&limit=<n>&offset=<n>` - Query logs with pagination
 
+## Proxy Behavior Details
+
+- **`POST /:modelId/chat/completions`** — Specific route that forwards request body fields (`messages`, `temperature`, `max_tokens`, `stream`) to `{model.baseUrl}/chat/completions`. Defaults: temperature=0.7, max_tokens=2048, stream=false. Uses `response.json()` so streaming is not actually supported despite accepting the `stream` parameter.
+- **`POST /:modelId/*`** — Catch-all that forwards the raw body to `{model.baseUrl}/{wildcard_path}`. No body transformation.
+- Both routes log every request (success, failure, error) to the `logs` collection and increment `usedQuota` on the API key record.
+- Both routes have a fallback "no auth" code path (when `req.apiKey` is undefined), though this won't be reached since `authenticateApiKey` is mounted on the parent router.
+
 ## Environment Variables
 
 - `PORT` - Server port (default: 3000)
 
-## Files to Note
+## Important Notes
 
-- `db.json` - Runtime database file (gitignored)
-- `.env` - Environment configuration (gitignored)
+- `db.json` is created relative to the working directory where `node server.js` is run, not relative to `db.js`. Always start the server from the `model-hub/` directory.
+- There is no test suite. The `apiKeys` and `models` management routes have no authentication — they are open to anyone who can reach the server.
+- The `stream: true` parameter is accepted but streaming responses are not actually implemented (uses `response.json()`).
