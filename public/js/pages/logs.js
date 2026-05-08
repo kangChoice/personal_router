@@ -1,18 +1,29 @@
 // Logs viewer page
 App.Pages.logs = async function (container) {
   container.innerHTML = `
-    <div class="page-header"><h2>请求日志</h2></div>
+    <div class="page-header">
+      <h2>请求日志</h2>
+      <button class="btn btn-danger" id="clear-logs-btn">清空日志</button>
+    </div>
     <div class="filters-bar" id="logs-filters">
       <div class="filter-group">
-        <label>自定义model name</label>
-        <select id="filter-apikey"><option value="">全部</option></select>
+        <label>开始日期</label>
+        <input type="date" id="filter-start-date">
       </div>
       <div class="filter-group">
-        <label>模型</label>
-        <select id="filter-model"><option value="">全部</option></select>
+        <label>结束日期</label>
+        <input type="date" id="filter-end-date">
       </div>
       <div class="filter-group">
-        <label>状态</label>
+        <label>本地模型</label>
+        <select id="filter-local-model"><option value="">全部</option></select>
+      </div>
+      <div class="filter-group">
+        <label>远程模型</label>
+        <select id="filter-remote-model"><option value="">全部</option></select>
+      </div>
+      <div class="filter-group">
+        <label>结果</label>
         <select id="filter-success">
           <option value="">全部</option>
           <option value="true">成功</option>
@@ -28,6 +39,7 @@ App.Pages.logs = async function (container) {
         </select>
       </div>
       <button class="btn btn-primary" id="apply-filters-btn">查询</button>
+      <button class="btn btn-secondary" id="reset-filters-btn">重置</button>
     </div>
     <div class="table-wrap" id="logs-table-wrap">
       <div class="loading">加载中...</div>
@@ -35,35 +47,62 @@ App.Pages.logs = async function (container) {
     <div class="pagination" id="logs-pagination"></div>
   `;
 
-  await populateLogFilters();
+  document.getElementById('clear-logs-btn').onclick = clearLogs;
   document.getElementById('apply-filters-btn').onclick = () => renderLogs(0);
+  document.getElementById('reset-filters-btn').onclick = resetFilters;
+
+  await populateLogFilters();
   renderLogs(0);
 };
 
-async function populateLogFilters() {
-  // Load keys for filter dropdown
+async function clearLogs() {
+  const ok = await App.util.showConfirm('清空日志', '确定要删除所有日志记录吗？此操作不可撤销。');
+  if (!ok) return;
   try {
-    const keys = await App.api.get('/api/keys');
-    App.state.keysCache = keys;
-    const sel = document.getElementById('filter-apikey');
-    keys.forEach(k => {
-      const opt = document.createElement('option');
-      opt.value = k.id;
-      opt.textContent = k.name + ' (' + k.key.substring(0, 8) + '...)';
-      sel.appendChild(opt);
-    });
-  } catch (e) { /* ignore */ }
+    const result = await App.api.del('/api/keys/logs');
+    App.util.showToast(`已清空 ${result.deleted} 条日志`, 'success');
+    renderLogs(0);
+  } catch (e) {
+    App.util.showToast('清空失败: ' + e.message, 'error');
+  }
+}
 
-  // Load models for filter dropdown
+function resetFilters() {
+  document.getElementById('filter-start-date').value = '';
+  document.getElementById('filter-end-date').value = '';
+  document.getElementById('filter-local-model').value = '';
+  document.getElementById('filter-remote-model').value = '';
+  document.getElementById('filter-success').value = '';
+  document.getElementById('filter-limit').value = '50';
+  renderLogs(0);
+}
+
+async function populateLogFilters() {
+  // Load models for local model and remote model filter dropdowns
   try {
     const models = await App.api.get('/api/models');
     App.state.modelsCache = models;
-    const sel = document.getElementById('filter-model');
+
+    // Local model names (model config name)
+    const localSel = document.getElementById('filter-local-model');
     models.forEach(m => {
       const opt = document.createElement('option');
-      opt.value = m.id;
+      opt.value = m.name;
       opt.textContent = m.name;
-      sel.appendChild(opt);
+      localSel.appendChild(opt);
+    });
+
+    // Remote model names (model config modelName), deduplicated
+    const remoteSel = document.getElementById('filter-remote-model');
+    const seen = new Set();
+    models.forEach(m => {
+      if (!seen.has(m.modelName)) {
+        seen.add(m.modelName);
+        const opt = document.createElement('option');
+        opt.value = m.modelName;
+        opt.textContent = m.modelName;
+        remoteSel.appendChild(opt);
+      }
     });
   } catch (e) { /* ignore */ }
 }
@@ -73,14 +112,18 @@ async function renderLogs(offset) {
   const pagination = document.getElementById('logs-pagination');
   wrap.innerHTML = '<div class="loading">加载中...</div>';
 
-  const apiKeyId = document.getElementById('filter-apikey').value;
-  const modelId = document.getElementById('filter-model').value;
+  const startDate = document.getElementById('filter-start-date').value;
+  const endDate = document.getElementById('filter-end-date').value;
+  const localModelName = document.getElementById('filter-local-model').value;
+  const remoteModelName = document.getElementById('filter-remote-model').value;
   const success = document.getElementById('filter-success').value;
   const limit = document.getElementById('filter-limit').value;
 
   const params = new URLSearchParams();
-  if (apiKeyId) params.set('apiKeyId', apiKeyId);
-  if (modelId) params.set('modelId', modelId);
+  if (startDate) params.set('startDate', startDate + 'T00:00:00.000+08:00');
+  if (endDate) params.set('endDate', endDate + 'T23:59:59.999+08:00');
+  if (localModelName) params.set('localModelName', localModelName);
+  if (remoteModelName) params.set('remoteModelName', remoteModelName);
   if (success) params.set('success', success);
   params.set('limit', limit);
   params.set('offset', offset);
@@ -94,40 +137,28 @@ async function renderLogs(offset) {
       return;
     }
 
-    // Build lookup maps for display names
-    const keyMap = {};
-    App.state.keysCache.forEach(k => { keyMap[k.id] = k.name; });
-    const modelMap = {};
-    App.state.modelsCache.forEach(m => { modelMap[m.id] = m.name; });
-
     wrap.innerHTML = `
       <table>
         <thead><tr>
-          <th>时间</th><th>自定义model name</th><th>模型(model别名)</th><th>path</th><th>方法</th><th>状态码</th><th>结果</th><th>耗时</th><th>请求大小</th><th>响应大小</th><th>错误</th>
+          <th>时间</th><th>本地模型</th><th>远程模型</th><th>上游地址</th><th>状态码</th><th>结果</th><th>请求大小</th><th>耗时</th>
         </tr></thead>
         <tbody>${data.logs.map(l => `
           <tr>
             <td style="white-space:nowrap">${App.util.formatDate(l.createdAt)}</td>
-            <td>${App.util.escapeHtml(l.apiKeyName || keyMap[l.apiKeyId] || l.apiKeyId)}</td>
-            <td>${App.util.escapeHtml(modelMap[l.modelId] || l.modelId)}</td>
-            <td class="mono">${App.util.escapeHtml(l.endpoint)}</td>
-            <td>${App.util.escapeHtml(l.method)}</td>
+            <td>${App.util.escapeHtml(l.localModelName || '-')}</td>
+            <td class="mono">${App.util.escapeHtml(l.remoteModelName || '-')}</td>
+            <td class="mono" style="max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${App.util.escapeHtml(l.upstreamUrl || '')}">${App.util.escapeHtml(l.upstreamUrl || '-')}</td>
             <td>${l.statusCode}</td>
             <td>${l.success
               ? '<span class="badge badge-success">成功</span>'
               : '<span class="badge badge-danger">失败</span>'}</td>
-            <td>${App.util.formatDuration(l.duration)}</td>
             <td>${App.util.formatBytes(l.requestSize)}</td>
-            <td>${App.util.formatBytes(l.responseSize)}</td>
-            <td>${l.errorMessage
-              ? `<span class="badge badge-danger" title="${App.util.escapeHtml(l.errorMessage)}">有</span>`
-              : '-'}</td>
+            <td>${App.util.formatDuration(l.duration)}</td>
           </tr>
         `).join('')}</tbody>
       </table>
     `;
 
-    // Pagination
     const total = data.total;
     const currentEnd = Math.min(offset + parseInt(limit), total);
     pagination.innerHTML = `

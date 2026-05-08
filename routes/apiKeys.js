@@ -3,6 +3,14 @@ const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
 const db = require('../db');
 
+// 清空所有日志
+router.delete('/logs', (req, res) => {
+  const logs = db.get('logs');
+  const count = logs.size().value();
+  logs.remove().write();
+  res.json({ message: '日志已清空', deleted: count });
+});
+
 // 获取所有 API Key（不返回完整 key，只显示前缀）
 router.get('/', (req, res) => {
   const apiKeys = db.get('apiKeys').value();
@@ -16,24 +24,40 @@ router.get('/', (req, res) => {
 
 // 日志查询端点（必须在 /:id 之前，否则 "logs" 会被当作 :id）
 router.get('/logs', (req, res) => {
-  const { apiKeyId, modelId, success, limit = 100, offset = 0 } = req.query;
+  const { localModelName, remoteModelName, success, startDate, endDate, limit = 100, offset = 0 } = req.query;
 
-  let query = {};
-  if (apiKeyId) query.apiKeyId = apiKeyId;
-  if (modelId) query.modelId = modelId;
-  if (success !== undefined) query.success = success === 'true';
+  // 取出所有日志为普通数组，用纯 JS 过滤，避免 lowdb/lodash 链式 filter 兼容问题
+  let logs = db.get('logs').value();
 
-  const logs = db.get('logs')
-    .filter(query)
-    .orderBy('createdAt', 'desc')
-    .slice(parseInt(offset), parseInt(offset) + parseInt(limit))
-    .value();
+  if (localModelName) {
+    logs = logs.filter(l => l.localModelName === localModelName);
+  }
+  if (remoteModelName) {
+    logs = logs.filter(l => l.remoteModelName === remoteModelName);
+  }
+  if (success !== undefined) {
+    const isSuccess = success === 'true';
+    logs = logs.filter(l => l.success === isSuccess);
+  }
+  if (startDate) {
+    logs = logs.filter(l => l.createdAt >= startDate);
+  }
+  if (endDate) {
+    logs = logs.filter(l => l.createdAt <= endDate);
+  }
+
+  // 按时间倒序
+  logs.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+
+  const total = logs.length;
+
+  const paged = logs.slice(parseInt(offset), parseInt(offset) + parseInt(limit));
 
   res.json({
-    total: db.get('logs').filter(query).size().value(),
+    total,
     limit: parseInt(limit),
     offset: parseInt(offset),
-    logs
+    logs: paged
   });
 });
 

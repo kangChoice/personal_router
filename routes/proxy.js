@@ -9,13 +9,24 @@ const db = require('../db');
 // 日志 & 配额
 // ═══════════════════════════════════════════════════════════
 
-function logRequest({ apiKey, modelId, endpoint, method, statusCode, success, duration, requestSize, responseSize, errorMessage }) {
+function chinaTimeISO() {
+  const d = new Date();
+  // 转为中国时区 (UTC+8)
+  const offset = 8 * 60; // +8 小时
+  const local = new Date(d.getTime() + offset * 60000);
+  return local.toISOString().replace('Z', '+08:00');
+}
+
+function logRequest({ apiKey, modelId, localModelName, remoteModelName, upstreamUrl, endpoint, method, statusCode, success, duration, requestSize, responseSize, errorMessage }) {
   if (!apiKey) return;
   db.get('logs').push({
     id: uuidv4(),
     apiKeyId: apiKey.id,
     apiKeyName: apiKey.name,
     modelId,
+    localModelName: localModelName || '',
+    remoteModelName: remoteModelName || '',
+    upstreamUrl: upstreamUrl || '',
     endpoint,
     method,
     statusCode,
@@ -24,7 +35,7 @@ function logRequest({ apiKey, modelId, endpoint, method, statusCode, success, du
     requestSize,
     responseSize: responseSize || 0,
     errorMessage,
-    createdAt: new Date().toISOString()
+    createdAt: chinaTimeISO()
   }).write();
 }
 
@@ -36,7 +47,7 @@ function incrementQuota(apiKey) {
     .find({ id: apiKey.id })
     .assign({
       usedQuota: (keyRecord.usedQuota || 0) + 1,
-      lastUsedAt: new Date().toISOString()
+      lastUsedAt: chinaTimeISO()
     })
     .write();
 }
@@ -563,6 +574,8 @@ router.post('/chat/completions', async (req, res) => {
       const errorData = await upstreamRes.json().catch(() => ({}));
       logRequest({
         apiKey: req.apiKey, modelId: model.id,
+        localModelName: model.name, remoteModelName: model.modelName,
+        upstreamUrl: `${model.baseUrl}/chat/completions`,
         endpoint: '/chat/completions', method: 'POST',
         statusCode: upstreamRes.status, success: false,
         duration: Date.now() - startTime,
@@ -577,6 +590,8 @@ router.post('/chat/completions', async (req, res) => {
       await streamOpenAIPassthrough(upstreamRes, res);
       logRequest({
         apiKey: req.apiKey, modelId: model.id,
+        localModelName: model.name, remoteModelName: model.modelName,
+        upstreamUrl: `${model.baseUrl}/chat/completions`,
         endpoint: '/chat/completions', method: 'POST',
         statusCode: 200, success: true,
         duration: Date.now() - startTime,
@@ -591,6 +606,8 @@ router.post('/chat/completions', async (req, res) => {
 
     logRequest({
       apiKey: req.apiKey, modelId: model.id,
+      localModelName: model.name, remoteModelName: model.modelName,
+      upstreamUrl: `${model.baseUrl}/chat/completions`,
       endpoint: '/chat/completions', method: 'POST',
       statusCode: upstreamRes.status, success: true,
       duration: Date.now() - startTime,
@@ -605,6 +622,8 @@ router.post('/chat/completions', async (req, res) => {
     logRequest({
       apiKey: req.apiKey,
       modelId: req.body?.model || 'unknown',
+      localModelName: '', remoteModelName: '',
+      upstreamUrl: '',
       endpoint: '/chat/completions', method: 'POST',
       statusCode: 500, success: false,
       duration: Date.now() - startTime,
@@ -657,6 +676,8 @@ router.post('/anthropic/v1/messages', async (req, res) => {
       const errorData = await upstreamRes.json().catch(() => ({}));
       logRequest({
         apiKey: req.apiKey, modelId: model.id,
+        localModelName: model.name, remoteModelName: model.modelName,
+        upstreamUrl: `${model.baseUrl}/v1/messages`,
         endpoint: '/anthropic/v1/messages', method: 'POST',
         statusCode: upstreamRes.status, success: false,
         duration: Date.now() - startTime,
@@ -682,6 +703,8 @@ router.post('/anthropic/v1/messages', async (req, res) => {
       upstreamRes.body.on('end', () => {
         logRequest({
           apiKey: req.apiKey, modelId: model.id,
+          localModelName: model.name, remoteModelName: model.modelName,
+          upstreamUrl: `${model.baseUrl}/v1/messages`,
           endpoint: '/anthropic/v1/messages', method: 'POST',
           statusCode: 200, success: true,
           duration: Date.now() - startTime,
@@ -697,6 +720,8 @@ router.post('/anthropic/v1/messages', async (req, res) => {
 
     logRequest({
       apiKey: req.apiKey, modelId: model.id,
+      localModelName: model.name, remoteModelName: model.modelName,
+      upstreamUrl: `${model.baseUrl}/v1/messages`,
       endpoint: '/anthropic/v1/messages', method: 'POST',
       statusCode: upstreamRes.status, success: true,
       duration: Date.now() - startTime,
@@ -711,6 +736,8 @@ router.post('/anthropic/v1/messages', async (req, res) => {
     logRequest({
       apiKey: req.apiKey,
       modelId: req.body?.model || 'unknown',
+      localModelName: '', remoteModelName: '',
+      upstreamUrl: '',
       endpoint: '/anthropic/v1/messages', method: 'POST',
       statusCode: 500, success: false,
       duration: Date.now() - startTime,
@@ -767,6 +794,8 @@ router.post('/*', async (req, res) => {
       const errorData = await upstreamRes.json().catch(() => ({}));
       logRequest({
         apiKey: req.apiKey, modelId: model.id,
+        localModelName: model.name, remoteModelName: model.modelName,
+        upstreamUrl: `${model.baseUrl}/${path}`,
         endpoint: `/${path}`, method: 'POST',
         statusCode: upstreamRes.status, success: false,
         duration: Date.now() - startTime,
@@ -781,6 +810,8 @@ router.post('/*', async (req, res) => {
       upstreamRes.body.pipe(res);
       logRequest({
         apiKey: req.apiKey, modelId: model.id,
+        localModelName: model.name, remoteModelName: model.modelName,
+        upstreamUrl: `${model.baseUrl}/${path}`,
         endpoint: `/${path}`, method: 'POST',
         statusCode: 200, success: true,
         duration: Date.now() - startTime,
@@ -794,6 +825,8 @@ router.post('/*', async (req, res) => {
 
     logRequest({
       apiKey: req.apiKey, modelId: model.id,
+      localModelName: model.name, remoteModelName: model.modelName,
+      upstreamUrl: `${model.baseUrl}/${path}`,
       endpoint: `/${path}`, method: 'POST',
       statusCode: upstreamRes.status, success: true,
       duration: Date.now() - startTime,
@@ -808,6 +841,8 @@ router.post('/*', async (req, res) => {
     logRequest({
       apiKey: req.apiKey,
       modelId: req.body?.model || 'unknown',
+      localModelName: '', remoteModelName: '',
+      upstreamUrl: '',
       endpoint: `/${req.params?.[0] || 'unknown'}`, method: 'POST',
       statusCode: 500, success: false,
       duration: Date.now() - startTime,
