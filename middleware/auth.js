@@ -27,14 +27,17 @@ const authenticateApiKey = (req, res, next) => {
     });
   }
 
-  // 查找匹配的 API key
-  const apiKeyRecord = db.get('apiKeys').find({ key: providedKey }).value();
+  // 查找所有匹配的 API key（支持共享 key 场景：多个本地模型共用一个 key）
+  const apiKeyRecords = db.get('apiKeys').filter({ key: providedKey }).value();
 
-  if (!apiKeyRecord) {
+  if (!apiKeyRecords || apiKeyRecords.length === 0) {
     return res.status(401).json({
       error: '无效的 API Key'
     });
   }
+
+  // 取第一条做状态检查
+  const apiKeyRecord = apiKeyRecords[0];
 
   // 检查是否启用
   if (!apiKeyRecord.enabled) {
@@ -65,11 +68,14 @@ const authenticateApiKey = (req, res, next) => {
     });
   }
 
+  // 合并所有共享此 key 的记录的 models（去重）
+  const allModels = [...new Set(apiKeyRecords.flatMap(k => k.models || []))];
+
   // 通过认证，将 key 信息附加到 request 对象
   req.apiKey = {
     id: apiKeyRecord.id,
     name: apiKeyRecord.name,
-    models: apiKeyRecord.models,
+    models: allModels,
     rateLimit: apiKeyRecord.rateLimit,
     quota: apiKeyRecord.quota,
     usedQuota: apiKeyRecord.usedQuota
@@ -86,11 +92,9 @@ const requireModelAccess = (modelIdParam = 'modelId') => {
   return (req, res, next) => {
     const modelId = req.params[modelIdParam];
 
-    // 每个密钥必须关联模型
+    // 空 models 表示通用密钥，允许访问所有模型
     if (!req.apiKey.models || req.apiKey.models.length === 0) {
-      return res.status(403).json({
-        error: '此密钥未关联任何模型'
-      });
+      return next();
     }
 
     // 检查模型 ID 是否在允许列表中

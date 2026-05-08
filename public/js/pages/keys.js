@@ -3,7 +3,10 @@ App.Pages.keys = async function (container) {
   container.innerHTML = `
     <div class="page-header">
       <h2>API 密钥管理</h2>
-      <button class="btn btn-primary" id="add-key-btn">+ 生成密钥</button>
+      <div class="btn-group">
+        <button class="btn btn-secondary" id="shared-key-btn">查询共享密钥</button>
+        <button class="btn btn-primary" id="add-key-btn">+ 生成密钥</button>
+      </div>
     </div>
     <div id="keys-stats-panel"></div>
     <div class="table-wrap" id="keys-table-wrap">
@@ -12,9 +15,49 @@ App.Pages.keys = async function (container) {
   `;
 
   document.getElementById('add-key-btn').onclick = () => showKeyForm();
+  document.getElementById('shared-key-btn').onclick = () => showSharedKeyInfo();
 
   await renderKeyTable();
 };
+
+async function showSharedKeyInfo() {
+  const panel = document.getElementById('keys-stats-panel');
+  panel.innerHTML = '<div class="loading">查询中...</div>';
+  try {
+    const info = await App.api.get('/api/keys/current-key');
+    if (!info.exists) {
+      panel.innerHTML = `<div class="empty-state"><p>${info.message}</p></div>`;
+      return;
+    }
+    panel.innerHTML = `
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px;margin-bottom:20px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+          <h3 style="font-size:1rem;">共享密钥信息</h3>
+          <button class="btn btn-secondary btn-sm" id="close-shared-key-btn">关闭</button>
+        </div>
+        <div class="stats-grid">
+          <div class="stat-card">
+            <div class="stat-label">共享密钥</div>
+            <div class="stat-value mono" style="font-size:0.8rem;word-break:break-all;">${App.util.escapeHtml(info.sharedKey)}</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">本地模型总数</div>
+            <div class="stat-value">${info.totalModels}</div>
+          </div>
+        </div>
+        <div style="margin-top:16px;">
+          <div style="font-size:0.85rem;color:var(--text-secondary);margin-bottom:8px;">已注册的本地模型：</div>
+          <div style="display:flex;flex-wrap:wrap;gap:8px;">
+            ${info.modelNames.map(n => `<span class="badge badge-info">${App.util.escapeHtml(n)}</span>`).join('')}
+          </div>
+        </div>
+      </div>
+    `;
+    document.getElementById('close-shared-key-btn').onclick = () => { panel.innerHTML = ''; };
+  } catch (e) {
+    panel.innerHTML = `<div class="empty-state"><p>查询失败: ${App.util.escapeHtml(e.message)}</p></div>`;
+  }
+}
 
 async function renderKeyTable() {
   const wrap = document.getElementById('keys-table-wrap');

@@ -23,6 +23,21 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok' });
 });
 
+// 启动时自动同步：所有本地模型共享同一个 key
+const allKeys = db.get('apiKeys').value();
+if (allKeys.length > 1) {
+  const firstKey = allKeys[0].key;
+  const needSync = allKeys.some(k => k.key !== firstKey);
+  if (needSync) {
+    allKeys.forEach(k => {
+      if (k.key !== firstKey) {
+        db.get('apiKeys').find({ id: k.id }).assign({ key: firstKey, updatedAt: new Date().toISOString() }).write();
+      }
+    });
+    console.log(`已同步 ${allKeys.length} 个本地模型使用共享密钥`);
+  }
+}
+
 app.listen(PORT, () => {
   console.log(`Model Hub 服务已启动：http://localhost:${PORT}`);
 });

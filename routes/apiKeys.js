@@ -37,6 +37,21 @@ router.get('/logs', (req, res) => {
   });
 });
 
+// 查询当前共享密钥信息
+router.get('/current-key', (req, res) => {
+  const allKeys = db.get('apiKeys').value();
+  if (allKeys.length === 0) {
+    return res.json({ exists: false, message: '暂无本地模型，创建第一个时将自动生成共享密钥' });
+  }
+  const sharedKey = allKeys[0].key;
+  res.json({
+    exists: true,
+    sharedKey,
+    totalModels: allKeys.length,
+    modelNames: allKeys.map(k => k.name)
+  });
+});
+
 // 获取单个 API Key 详情（需要完整 key ID）
 router.get('/:id', (req, res) => {
   const apiKey = db.get('apiKeys').find({ id: req.params.id }).value();
@@ -58,19 +73,31 @@ router.post('/', (req, res) => {
   if (!name) {
     return res.status(400).json({ error: '名称为必填项' });
   }
-  if (!models || !Array.isArray(models) || models.length === 0) {
-    return res.status(400).json({ error: '必须关联至少一个模型' });
+
+  // 密钥名称不能重复（作为本地模型标识）
+  const existingName = db.get('apiKeys').find({ name }).value();
+  if (existingName) {
+    return res.status(409).json({ error: `密钥名称 "${name}" 已存在，请使用不同的名称` });
   }
-  if (models.length > 1) {
+
+  const modelsList = models || [];
+  if (!Array.isArray(modelsList)) {
+    return res.status(400).json({ error: 'models 必须是数组' });
+  }
+  if (modelsList.length > 1) {
     return res.status(400).json({ error: '每个密钥只能关联一个模型' });
   }
 
+  // 共享密钥：所有本地模型使用同一个 key
+  const existingKeys = db.get('apiKeys').value();
+  const sharedKey = existingKeys.length > 0 ? existingKeys[0].key : `sk-${uuidv4()}`;
+
   const newKey = {
     id: uuidv4(),
-    key: `sk-${uuidv4()}`,
+    key: sharedKey,
     name,
     description: description || '',
-    models,
+    models: modelsList,
     rateLimit: rateLimit || null,
     quota: quota || null,
     usedQuota: 0,
@@ -96,9 +123,17 @@ router.put('/:id', (req, res) => {
 
   const { name, description, models, rateLimit, quota, expiresAt, enabled } = req.body;
 
+  // 名称唯一性检查
+  if (name !== undefined && name !== apiKey.name) {
+    const conflict = db.get('apiKeys').find({ name }).value();
+    if (conflict) {
+      return res.status(409).json({ error: `密钥名称 "${name}" 已存在，请使用不同的名称` });
+    }
+  }
+
   if (models !== undefined) {
-    if (!Array.isArray(models) || models.length === 0) {
-      return res.status(400).json({ error: '必须关联至少一个模型' });
+    if (!Array.isArray(models)) {
+      return res.status(400).json({ error: 'models 必须是数组' });
     }
     if (models.length > 1) {
       return res.status(400).json({ error: '每个密钥只能关联一个模型' });
