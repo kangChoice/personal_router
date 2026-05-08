@@ -4,7 +4,7 @@ App.Pages.logs = async function (container) {
     <div class="page-header"><h2>请求日志</h2></div>
     <div class="filters-bar" id="logs-filters">
       <div class="filter-group">
-        <label>API 密钥</label>
+        <label>自定义model name</label>
         <select id="filter-apikey"><option value="">全部</option></select>
       </div>
       <div class="filter-group">
@@ -103,7 +103,7 @@ async function renderLogs(offset) {
     wrap.innerHTML = `
       <table>
         <thead><tr>
-          <th>时间</th><th>API 密钥</th><th>模型</th><th>端点</th><th>方法</th><th>状态码</th><th>结果</th><th>耗时</th><th>请求大小</th><th>响应大小</th><th>错误</th>
+          <th>时间</th><th>自定义model name</th><th>模型(model别名)</th><th>path</th><th>方法</th><th>状态码</th><th>结果</th><th>耗时</th><th>请求大小</th><th>响应大小</th><th>错误</th>
         </tr></thead>
         <tbody>${data.logs.map(l => `
           <tr>

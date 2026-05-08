@@ -142,11 +142,34 @@ App.util = {
   }
 };
 
+// ---- Theme Toggle ----
+App.theme = {
+  _get() {
+    return document.documentElement.getAttribute('data-theme') || 'light';
+  },
+  _set(theme) {
+    document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem('theme', theme);
+  },
+  toggle() {
+    const next = this._get() === 'dark' ? 'light' : 'dark';
+    this._set(next);
+    return next;
+  },
+  init() {
+    const saved = localStorage.getItem('theme');
+    this._set(saved || 'light');
+    document.getElementById('theme-toggle').onclick = () => this.toggle();
+  }
+};
+
 // ---- Init ----
 App.init = function () {
   window.addEventListener('hashchange', () => {
     App.router.navigate(location.hash);
   });
+
+  App.theme.init();
 
   // Check server health
   App.api.get('/api/health')

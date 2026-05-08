@@ -76,7 +76,7 @@ async function renderKeyTable() {
     wrap.innerHTML = `
       <table>
         <thead><tr>
-          <th>名称</th><th>密钥</th><th>可访问模型</th><th>配额</th><th>状态</th><th>最后使用</th><th>操作</th>
+          <th>自定义model名称</th><th>密钥</th><th>可访问模型(model别名)</th><th>配额</th><th>状态</th><th>最后使用</th><th>操作</th>
         </tr></thead>
         <tbody>${keys.map(k => {
           const quotaStr = k.quota ? `${k.usedQuota || 0} / ${k.quota}` : '无限制';

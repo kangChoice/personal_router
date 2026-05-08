@@ -33,7 +33,7 @@ async function renderModelTable() {
     wrap.innerHTML = `
       <table>
         <thead><tr>
-          <th>名称</th><th>Model Name</th><th>Base URL</th><th>描述</th><th>API Key</th><th>创建时间</th><th>操作</th>
+          <th>model别名</th><th>Model Name(远程模型名称)</th><th>Base URL</th><th>描述</th><th>API Key</th><th>创建时间</th><th>操作</th>
         </tr></thead>
         <tbody>${models.map(m => `
           <tr>
