@@ -47,6 +47,22 @@ function incrementQuota(apiKey) {
 
 function resolveModel(req) {
   const modelHint = req.body?.model;
+
+  // 优先: 用 modelHint 匹配 apiKeys.name → 通过 key 的 models 列表找到上游模型
+  if (modelHint) {
+    const apiKey = db.get('apiKeys').find({ name: modelHint }).value();
+    if (apiKey && apiKey.models && apiKey.models.length > 0) {
+      const model = db.get('models').find({ id: apiKey.models[0] }).value();
+      if (model) {
+        if (req.apiKey?.models?.length > 0 && !req.apiKey.models.includes(model.id)) {
+          return { forbidden: true, allowedModels: req.apiKey.models };
+        }
+        return model;
+      }
+    }
+  }
+
+  // 回退: 直接用 modelHint 匹配 models.name
   const model = modelHint
     ? db.get('models').find({ name: modelHint }).value()
     : db.get('models').first().value();
@@ -602,7 +618,7 @@ router.post('/chat/completions', async (req, res) => {
 });
 
 // ═══════════════════════════════════════════════════════════
-// 路由: POST /anthropic/v1/messages (Anthropic 兼容)
+// 路由: POST /anthropic/v1/messages (Anthropic 透传)
 // ═══════════════════════════════════════════════════════════
 
 router.post('/anthropic/v1/messages', async (req, res) => {
@@ -624,13 +640,11 @@ router.post('/anthropic/v1/messages', async (req, res) => {
       });
     }
 
-    const { openaiBody, toolIdMap } = anthropicToOpenAI(req.body, model.modelName);
-    const streamRequested = req.body.stream === true;
-    openaiBody.stream = streamRequested;
+    // 透传：仅覆写 model 字段，不做协议转换
+    const upstreamBody = { ...req.body, model: model.modelName };
+    requestBody = JSON.stringify(upstreamBody);
 
-    requestBody = JSON.stringify(openaiBody);
-
-    const upstreamRes = await fetch(`${model.baseUrl}/chat/completions`, {
+    const upstreamRes = await fetch(`${model.baseUrl}/v1/messages`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -658,23 +672,28 @@ router.post('/anthropic/v1/messages', async (req, res) => {
       });
     }
 
-    // 流式响应
-    if (streamRequested) {
-      await streamOpenAIToAnthropic(upstreamRes, res, model.modelName);
-      logRequest({
-        apiKey: req.apiKey, modelId: model.id,
-        endpoint: '/anthropic/v1/messages', method: 'POST',
-        statusCode: 200, success: true,
-        duration: Date.now() - startTime,
-        requestSize: Buffer.byteLength(requestBody)
+    // 流式透传
+    if (req.body.stream) {
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Connection', 'keep-alive');
+      res.setHeader('X-Accel-Buffering', 'no');
+      upstreamRes.body.pipe(res);
+      upstreamRes.body.on('end', () => {
+        logRequest({
+          apiKey: req.apiKey, modelId: model.id,
+          endpoint: '/anthropic/v1/messages', method: 'POST',
+          statusCode: 200, success: true,
+          duration: Date.now() - startTime,
+          requestSize: Buffer.byteLength(requestBody)
+        });
+        incrementQuota(req.apiKey);
       });
-      incrementQuota(req.apiKey);
       return;
     }
 
-    // 非流式响应
+    // 非流式透传
     const data = await upstreamRes.json();
-    const anthropicResponse = openAIToAnthropic(data, model.modelName, toolIdMap);
 
     logRequest({
       apiKey: req.apiKey, modelId: model.id,
@@ -682,11 +701,11 @@ router.post('/anthropic/v1/messages', async (req, res) => {
       statusCode: upstreamRes.status, success: true,
       duration: Date.now() - startTime,
       requestSize: Buffer.byteLength(requestBody),
-      responseSize: Buffer.byteLength(JSON.stringify(anthropicResponse))
+      responseSize: Buffer.byteLength(JSON.stringify(data))
     });
     incrementQuota(req.apiKey);
 
-    res.json(anthropicResponse);
+    res.json(data);
   } catch (error) {
     console.error('Proxy error:', error);
     logRequest({
