@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Model Hub (模型中转站) - A Node.js/Express proxy server that forwards API requests to AI model providers. It supports both **OpenAI-compatible** (`/chat/completions`) and **Anthropic-compatible** (`/anthropic/v1/messages`) protocols with full protocol conversion (system prompt, tool_use, tool_result, images, streaming SSE). Users configure model endpoints via REST API, and the proxy handles authentication and request forwarding.
+Model Hub (模型中转站) - A Node.js/Express proxy server that forwards API requests to AI model providers. It supports **OpenAI-compatible** (`/chat/completions`) and **Anthropic-compatible** (`/anthropic/v1/messages`) protocols, plus a generic wildcard proxy. All routes are currently **passthrough** — they forward requests as-is to the upstream, only overriding the `model` field. Protocol conversion functions (Anthropic↔OpenAI) exist in `proxy.js` but are dormant (not wired to any route). Users configure model endpoints via REST API, and the proxy handles authentication and request forwarding.
 
 ## Commands
 
@@ -20,19 +20,30 @@ Server runs on `http://localhost:9999` (configurable via `PORT` env var).
 - **server.js** - Express app entry point, mounts middleware and routes. Body parser limit is 200mb (required for Claude Code requests).
 - **db.js** - LowDB file-based database (db.json), stores `models`, `apiKeys`, `logs` collections.
 - **middleware/auth.js** - API Key authentication middleware (`authenticateApiKey`) and model access control (`requireModelAccess`).
-- **routes/proxy.js** — Core proxy logic with Anthropic↔OpenAI protocol conversion and SSE streaming.
-  - `POST /api/proxy/chat/completions` — OpenAI-compatible route, passes through to upstream as-is (no protocol conversion), supports streaming.
-  - `POST /api/proxy/anthropic/v1/messages` — Anthropic-compatible route, converts Anthropic request body to OpenAI format for upstream, converts response back to Anthropic format. Supports streaming with full SSE event sequence (message_start → content_block_start/delta/stop → message_delta → message_stop).
-  - `POST /api/proxy/*` — Generic wildcard proxy, passes through with minimal transformation (only overrides `model` field).
+- **routes/proxy.js** — Core proxy logic. All three routes are passthrough (forward as-is, only override `model`). Also contains dormant Anthropic↔OpenAI protocol conversion functions and SSE streaming helpers that are defined but not currently wired to any route.
+  - `POST /api/proxy/chat/completions` — Forwards to upstream's `/chat/completions`. Supports streaming via `streamOpenAIPassthrough` (pipe).
+  - `POST /api/proxy/anthropic/v1/messages` — Forwards to upstream's `/v1/messages`. Supports streaming via pipe. No protocol conversion.
+  - `POST /api/proxy/*` — Generic wildcard proxy, forwards to upstream's `/<captured-path>`. Only overrides `model` field.
 - **routes/models.js** — CRUD for model configurations at `/api/models`.
 - **routes/apiKeys.js** — CRUD for API keys at `/api/keys`, plus `/logs` query endpoint.
+- **nodemon.json** — Configured to ignore `db.json` changes, preventing restart loops when the database is written to.
+- **public/** — Admin panel frontend (index.html, css/style.css, js/app.js, js/api.js, js/pages/{models,keys,logs}.js). Served as static files by Express.
 
 ### Model Resolution
 
-`resolveModel(req)` in proxy.js matches the `model` field from the request body against the `name` field in model configs. This means:
-- The `:modelId` URL param is no longer used by the proxy routes.
-- Claude Code's `ANTHROPIC_MODEL` must match a model config's `name`.
+`resolveModel(req)` in proxy.js uses a **two-step fallback**:
+
+1. **API Key name match**: If `model` matches an API key's `name`, use that key's first model (from `apiKey.models[0]`). This lets you use the API key name as the model hint.
+2. **Model name match (fallback)**: Match `model` directly against model config `name` fields. If `model` is absent, returns the first model in the database.
+
+Both steps enforce access control: if the authenticated API key has a restricted `models` list, the resolved model must be in that list.
+
+Model names are **unique** (enforced at create/update). Note that `resolveModel` tries API key name first, so an API key name that collides with a model name will shadow the model.
+
+Key implications:
+- Claude Code's `ANTHROPIC_MODEL` must match either an API key name or a model config `name`.
 - The upstream request uses the model config's `modelName` field (e.g. `deepseek-chat`).
+- The `:modelId` URL param is not used by proxy routes.
 
 ## Authentication
 
@@ -43,9 +54,11 @@ The middleware validates: key exists, enabled, not expired, and quota not exhaus
 
 Model management (`/api/models`) and key management (`/api/keys`) routes have **no authentication**.
 
-## Protocol Conversion Details
+## Dormant Protocol Conversion Functions
 
-### Anthropic → OpenAI (request direction)
+The following functions are defined in `proxy.js` but **not currently wired** to any route. They exist for scenarios where an Anthropic-speaking client needs to reach an OpenAI-only upstream.
+
+### Anthropic → OpenAI (request direction) — `anthropicToOpenAI(body, modelName)`
 - `system` field (string or array of text blocks) → system message
 - Tool definitions: Anthropic `input_schema` → OpenAI `parameters`
 - `tool_choice`: `{type:"any"}` → `"required"`, `{type:"tool",name:"x"}` → `{type:"function",function:{name:"x"}}`
@@ -54,7 +67,7 @@ Model management (`/api/models`) and key management (`/api/keys`) routes have **
 - `tool_use` → OpenAI `tool_calls` with ID mapping
 - `tool_result` → OpenAI `tool` role message with matching `tool_call_id`
 
-### OpenAI → Anthropic (response direction)
+### OpenAI → Anthropic (response direction) — `openAIToAnthropic()` / `streamOpenAIToAnthropic()`
 - Response conversion for both streaming and non-streaming modes
 - `finish_reason` mapping: `stop`→`end_turn`, `length`→`max_tokens`, `tool_calls`→`tool_use`
 - Streaming: OpenAI SSE chunks → Anthropic SSE events (content_block_delta with text_delta or input_json_delta)
@@ -65,8 +78,8 @@ Model management (`/api/models`) and key management (`/api/keys`) routes have **
 ### Model Management (`/api/models`)
 - `GET /` — List all model configs
 - `GET /:id` — Get single model config
-- `POST /` — Create model config (requires: `name`, `apiKey`, `baseUrl`; optional: `modelName`, `description`)
-- `PUT /:id` — Update model config
+- `POST /` — Create model config (requires: `name`, `apiKey`, `baseUrl`; optional: `modelName`, `description`). Returns 409 if `name` already exists.
+- `PUT /:id` — Update model config. Returns 409 if new `name` conflicts with another model.
 - `DELETE /:id` — Delete model config
 
 ### API Key Management (`/api/keys`)
@@ -81,8 +94,8 @@ Model management (`/api/models`) and key management (`/api/keys`) routes have **
 
 ### Proxy (`/api/proxy`)
 - `POST /chat/completions` — OpenAI-compatible (passthrough)
-- `POST /anthropic/v1/messages` — Anthropic-compatible (protocol conversion)
-- `POST /*` — Generic wildcard proxy
+- `POST /anthropic/v1/messages` — Anthropic-compatible (passthrough)
+- `POST /*` — Generic wildcard proxy (passthrough)
 
 ### Health Check
 - `GET /api/health` — Returns `{ status: 'ok' }`
@@ -93,3 +106,4 @@ Model management (`/api/models`) and key management (`/api/keys`) routes have **
 - Model management and key management endpoints have no authentication — accessible to anyone who can reach the server.
 - The proxy uses `node-fetch` v2 (CommonJS compatible).
 - Logs accumulate in db.json without automatic cleanup.
+- The Anthropic↔OpenAI protocol conversion functions exist in `proxy.js` but are dormant. If you need to proxy an Anthropic client to an OpenAI-only upstream, wire `anthropicToOpenAI` into the request path and `openAIToAnthropic` (or `streamOpenAIToAnthropic`) into the response path.

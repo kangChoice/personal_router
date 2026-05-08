@@ -58,17 +58,23 @@ router.post('/', (req, res) => {
   if (!name) {
     return res.status(400).json({ error: '名称为必填项' });
   }
+  if (!models || !Array.isArray(models) || models.length === 0) {
+    return res.status(400).json({ error: '必须关联至少一个模型' });
+  }
+  if (models.length > 1) {
+    return res.status(400).json({ error: '每个密钥只能关联一个模型' });
+  }
 
   const newKey = {
     id: uuidv4(),
     key: `sk-${uuidv4()}`,
     name,
     description: description || '',
-    models: models || [], // 可访问的模型列表，空数组表示可访问所有
-    rateLimit: rateLimit || null, // 每分钟请求数限制
-    quota: quota || null, // 总请求数配额
-    usedQuota: 0, // 已使用配额
-    expiresAt: expiresAt || null, // 过期时间 ISO 字符串
+    models,
+    rateLimit: rateLimit || null,
+    quota: quota || null,
+    usedQuota: 0,
+    expiresAt: expiresAt || null,
     enabled: true,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
@@ -89,6 +95,15 @@ router.put('/:id', (req, res) => {
   }
 
   const { name, description, models, rateLimit, quota, expiresAt, enabled } = req.body;
+
+  if (models !== undefined) {
+    if (!Array.isArray(models) || models.length === 0) {
+      return res.status(400).json({ error: '必须关联至少一个模型' });
+    }
+    if (models.length > 1) {
+      return res.status(400).json({ error: '每个密钥只能关联一个模型' });
+    }
+  }
 
   const updatedKey = {
     ...apiKey,
@@ -112,7 +127,7 @@ router.put('/:id', (req, res) => {
   });
 });
 
-// 重置配额
+// 重置所有限制（配额、速率、过期时间）
 router.post('/:id/reset-quota', (req, res) => {
   const apiKey = db.get('apiKeys').find({ id: req.params.id }).value();
   if (!apiKey) {
@@ -122,11 +137,14 @@ router.post('/:id/reset-quota', (req, res) => {
   const updatedKey = {
     ...apiKey,
     usedQuota: 0,
+    quota: null,
+    rateLimit: null,
+    expiresAt: null,
     updatedAt: new Date().toISOString()
   };
 
   db.get('apiKeys').find({ id: req.params.id }).assign(updatedKey).write();
-  res.json({ message: '配额已重置', usedQuota: 0 });
+  res.json({ message: '所有限制已清空', usedQuota: 0, quota: null, rateLimit: null, expiresAt: null });
 });
 
 // 删除 API Key

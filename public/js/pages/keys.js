@@ -37,12 +37,15 @@ async function renderKeyTable() {
         </tr></thead>
         <tbody>${keys.map(k => {
           const quotaStr = k.quota ? `${k.usedQuota || 0} / ${k.quota}` : '无限制';
-          const modelCount = k.models?.length || 0;
+          const modelId = k.models?.[0];
+          const modelDisplay = modelId
+            ? (App.state.modelsCache?.find(m => m.id === modelId)?.name || modelId)
+            : '-';
           return `
           <tr>
             <td><strong>${App.util.escapeHtml(k.name)}</strong></td>
             <td class="mono">${App.util.escapeHtml(k.key)}</td>
-            <td>${modelCount ? `${modelCount} 个模型` : '<span class="badge badge-info">全部</span>'}</td>
+            <td>${modelDisplay}</td>
             <td>${quotaStr}</td>
             <td>${k.enabled !== false
               ? '<span class="badge badge-success">启用</span>'
@@ -170,7 +173,7 @@ async function showKeyForm(existing) {
   }
 
   const modelOpts = models.map(m => {
-    const sel = existing?.models?.includes(m.id) ? 'selected' : '';
+    const sel = (existing?.models?.[0] === m.id) || (!existing && models.indexOf(m) === 0) ? 'selected' : '';
     return `<option value="${m.id}" ${sel}>${App.util.escapeHtml(m.name)} (${App.util.escapeHtml(m.modelName)})</option>`;
   }).join('');
 
@@ -190,10 +193,10 @@ async function showKeyForm(existing) {
       </div>
       <div class="form-group">
         <label>允许访问的模型</label>
-        <select id="form-key-models" multiple style="min-height:100px;">
+        <select id="form-key-models" style="min-height:36px;">
           ${modelOpts}
         </select>
-        <div class="form-hint">不选 = 允许访问所有模型 (Ctrl/Cmd+点击多选)</div>
+        <div class="form-hint">每个密钥只能关联一个模型</div>
       </div>
       <div class="form-group">
         <label>速率限制 (次/分钟)</label>
@@ -228,7 +231,7 @@ async function showKeyForm(existing) {
     const name = overlay.querySelector('#form-key-name').value.trim();
     const description = overlay.querySelector('#form-key-desc').value.trim();
     const modelsSelect = overlay.querySelector('#form-key-models');
-    const models = Array.from(modelsSelect.selectedOptions).map(o => o.value);
+    const models = modelsSelect.value ? [modelsSelect.value] : [];
     const rateLimit = overlay.querySelector('#form-key-rate').value;
     const quota = overlay.querySelector('#form-key-quota').value;
     const expiresAt = overlay.querySelector('#form-key-expires').value;

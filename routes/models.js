@@ -26,6 +26,12 @@ router.post('/', (req, res) => {
     return res.status(400).json({ error: '名称、密钥和 URL 为必填项' });
   }
 
+  // 模型名称不能重复
+  const existing = db.get('models').find({ name }).value();
+  if (existing) {
+    return res.status(409).json({ error: `模型名称 "${name}" 已存在，请使用不同的名称` });
+  }
+
   const newModel = {
     id: uuidv4(),
     name,
@@ -49,6 +55,14 @@ router.put('/:id', (req, res) => {
   }
 
   const { name, apiKey, baseUrl, modelName, description } = req.body;
+
+  // 如果修改了名称，检查是否与已有模型冲突
+  if (name !== undefined && name !== model.name) {
+    const conflict = db.get('models').find({ name }).value();
+    if (conflict) {
+      return res.status(409).json({ error: `模型名称 "${name}" 已存在，请使用不同的名称` });
+    }
+  }
 
   const updatedModel = {
     ...model,

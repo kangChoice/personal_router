@@ -86,9 +86,11 @@ const requireModelAccess = (modelIdParam = 'modelId') => {
   return (req, res, next) => {
     const modelId = req.params[modelIdParam];
 
-    // 如果没有指定可访问的模型列表，则允许访问所有模型
+    // 每个密钥必须关联模型
     if (!req.apiKey.models || req.apiKey.models.length === 0) {
-      return next();
+      return res.status(403).json({
+        error: '此密钥未关联任何模型'
+      });
     }
 
     // 检查模型 ID 是否在允许列表中
