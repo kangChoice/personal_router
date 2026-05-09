@@ -1,11 +1,12 @@
 App.Pages.settings = async function (container) {
   const savedPath = localStorage.getItem('claude-settings-path') || '';
-  const defaultPath = '~/.claude/settings.json';
+  const winDefaultPath = '~\\.claude\\settings.json';
+  const macDefaultPath = '~/.claude/settings.json';
 
   container.innerHTML = `
     <div class="page-header">
-      <h2>设置</h2>
-      <span class="page-subtitle">配置 Claude Code 的 settings.json</span>
+      <h2>配置更新</h2>
+      <span class="page-subtitle">一键根据当前配置自定义模型更新 Claude Code 的 settings.json</span>
     </div>
     <div class="card">
       <div class="card-body">
@@ -13,11 +14,12 @@ App.Pages.settings = async function (container) {
           <label class="form-label">本机配置文件路径</label>
           <div class="settings-path-row">
             <input type="text" class="form-input" id="settings-path"
-              placeholder="${App.util.escapeHtml(defaultPath)}"
+              placeholder="${App.util.escapeHtml(macDefaultPath)}"
               value="${App.util.escapeHtml(savedPath)}">
-            <button class="btn btn-secondary" id="reset-path-btn">默认</button>
+            <button class="btn btn-secondary" id="reset-path-win-btn">Win默认</button>
+            <button class="btn btn-secondary" id="reset-path-mac-btn">Mac默认</button>
           </div>
-          <span class="form-hint">Claude Code 的 settings.json 文件路径，例如 Windows 下为 C:\\Users\\用户名\\.claude\\settings.json，macOS/Linux 下为 ~/.claude/settings.json</span>
+          <span class="form-hint">Claude Code 的 settings.json 文件路径，Windows 下为 ~\\.claude\\settings.json，macOS/Linux 下为 ~/.claude/settings.json</span>
         </div>
         <div class="form-group">
           <button class="btn btn-primary" id="generate-btn">生成 settings.json</button>
@@ -45,13 +47,18 @@ App.Pages.settings = async function (container) {
     localStorage.setItem('claude-settings-path', pathInput.value.trim());
   });
 
-  document.getElementById('reset-path-btn').addEventListener('click', () => {
-    pathInput.value = defaultPath;
-    localStorage.setItem('claude-settings-path', defaultPath);
+  document.getElementById('reset-path-win-btn').addEventListener('click', () => {
+    pathInput.value = winDefaultPath;
+    localStorage.setItem('claude-settings-path', winDefaultPath);
+  });
+
+  document.getElementById('reset-path-mac-btn').addEventListener('click', () => {
+    pathInput.value = macDefaultPath;
+    localStorage.setItem('claude-settings-path', macDefaultPath);
   });
 
   document.getElementById('generate-btn').addEventListener('click', async () => {
-    const filePath = pathInput.value.trim() || defaultPath;
+    const filePath = pathInput.value.trim() || macDefaultPath;
     localStorage.setItem('claude-settings-path', filePath);
 
     const btn = document.getElementById('generate-btn');
@@ -97,7 +104,7 @@ App.Pages.settings = async function (container) {
       document.getElementById('overwrite-btn').addEventListener('click', async () => {
         const confirmed = await App.util.showConfirm(
           '覆盖确认',
-          `确认要将 settings.json 写入以下路径吗？此操作将覆盖已有文件。<br><br><code>${App.util.escapeHtml(filePath)}</code>`
+          `确认要将 settings.json 写入以下路径吗？此操作将覆盖已有文件。<br><br><span style="display:inline-block;background:var(--bg);border:1px solid var(--danger);color:var(--danger);padding:6px 12px;border-radius:4px;font-family:monospace;word-break:break-all;">${App.util.escapeHtml(filePath)}</span>`
         );
         if (!confirmed) return;
 

@@ -5,6 +5,7 @@ App.Pages.keys = async function (container) {
       <h2>本地模型管理</h2>
       <div class="btn-group">
         <button class="btn btn-secondary" id="shared-key-btn">查询共享密钥</button>
+        <button class="btn btn-secondary" id="generate-settings-btn">生成 settings.json</button>
         <button class="btn btn-primary" id="add-key-btn">+ 自定义模型</button>
       </div>
     </div>
@@ -16,6 +17,7 @@ App.Pages.keys = async function (container) {
 
   document.getElementById('add-key-btn').onclick = () => showKeyForm();
   document.getElementById('shared-key-btn').onclick = () => showSharedKeyInfo();
+  document.getElementById('generate-settings-btn').onclick = () => generateSettings();
 
   await renderKeyTable();
 };
@@ -307,6 +309,32 @@ async function showKeyForm(existing) {
       }
     } catch (e) { App.util.showToast('操作失败: ' + e.message, 'error'); }
   });
+}
+
+async function generateSettings() {
+  try {
+    const result = await App.api.post('/api/models/generate-settings');
+    const { overlay, close } = App.util.showModal(`
+      <div class="modal-header">
+        <h3>自动生成的中转站CC配置如下</h3>
+        <button class="modal-close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <pre style="background:var(--bg);padding:12px;border-radius:4px;max-height:400px;overflow:auto;font-size:0.8rem;">${App.util.escapeHtml(JSON.stringify(result.settings, null, 2))}</pre>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-primary" id="copy-settings-btn">复制</button>
+        <button class="btn btn-secondary close-btn">关闭</button>
+      </div>
+    `, { wide: true });
+    overlay.querySelector('.close-btn')?.addEventListener('click', close);
+    overlay.querySelector('#copy-settings-btn').addEventListener('click', async () => {
+      await App.util.copyToClipboard(JSON.stringify(result.settings, null, 2));
+      App.util.showToast('已复制到剪贴板', 'success');
+    });
+  } catch (e) {
+    App.util.showToast('生成失败: ' + e.message, 'error');
+  }
 }
 
 function showKeyReveal(keyData) {

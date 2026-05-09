@@ -115,16 +115,7 @@ router.post('/generate-settings', (req, res) => {
     theme: 'dark'
   };
 
-  const fs = require('fs');
-  const path = require('path');
-  const settingsPath = path.join(__dirname, '..', 'settings.json');
-
-  try {
-    fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2), 'utf-8');
-    res.json({ message: 'settings.json 已生成', path: settingsPath, settings });
-  } catch (err) {
-    res.status(500).json({ error: '文件写入失败', details: err.message });
-  }
+  res.json({ settings });
 });
 
 // 删除模型配置
