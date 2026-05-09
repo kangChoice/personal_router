@@ -4,6 +4,7 @@ const db = require('./db');
 const modelRoutes = require('./routes/models');
 const proxyRoutes = require('./routes/proxy');
 const apiKeyRoutes = require('./routes/apiKeys');
+const settingsRoutes = require('./routes/settings');
 const { authenticateApiKey } = require('./middleware/auth');
 
 const app = express();
@@ -17,6 +18,7 @@ app.use(express.static('public'));
 app.use('/api/models', modelRoutes);
 app.use('/api/proxy', authenticateApiKey, proxyRoutes);
 app.use('/api/keys', apiKeyRoutes);
+app.use('/api/settings', settingsRoutes);
 
 // 健康检查
 app.get('/api/health', (req, res) => {

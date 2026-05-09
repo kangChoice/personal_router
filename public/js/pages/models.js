@@ -2,7 +2,7 @@
 App.Pages.models = async function (container) {
   container.innerHTML = `
     <div class="page-header">
-      <h2>模型管理</h2>
+      <h2>远程模型管理</h2>
       <div class="btn-group">
         <button class="btn btn-secondary" id="generate-settings-btn">生成 settings.json</button>
         <button class="btn btn-primary" id="add-model-btn">+ 添加模型</button>
