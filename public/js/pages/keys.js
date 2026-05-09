@@ -188,6 +188,14 @@ async function showKeyStats(keyId) {
             <div class="stat-label">响应流量</div>
             <div class="stat-value">${App.util.formatBytes(stats.totalResponseSize)}</div>
           </div>
+          <div class="stat-card">
+            <div class="stat-label">输入 Token</div>
+            <div class="stat-value">${stats.totalInputTokens.toLocaleString()}</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">输出 Token</div>
+            <div class="stat-value">${stats.totalOutputTokens.toLocaleString()}</div>
+          </div>
         </div>
         ${stats.quotaLimit ? `
           <div style="margin-top:16px;">

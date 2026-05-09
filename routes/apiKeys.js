@@ -234,6 +234,8 @@ router.get('/:id/stats', (req, res) => {
     failedRequests: keyLogs.filter(l => !l.success).length,
     totalRequestSize: keyLogs.reduce((sum, l) => sum + (l.requestSize || 0), 0),
     totalResponseSize: keyLogs.reduce((sum, l) => sum + (l.responseSize || 0), 0),
+    totalInputTokens: keyLogs.reduce((sum, l) => sum + (l.inputTokens || 0), 0),
+    totalOutputTokens: keyLogs.reduce((sum, l) => sum + (l.outputTokens || 0), 0),
     avgDuration: keyLogs.length > 0
       ? Math.round(keyLogs.reduce((sum, l) => sum + (l.duration || 0), 0) / keyLogs.length)
       : 0,

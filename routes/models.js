@@ -78,6 +78,55 @@ router.put('/:id', (req, res) => {
   res.json(updatedModel);
 });
 
+// 根据当前模型配置生成 settings.json (Claude Code 格式) 到项目根目录
+router.post('/generate-settings', (req, res) => {
+  const models = db.get('models').value();
+  const apiKeys = db.get('apiKeys').value();
+
+  if (!apiKeys.length) {
+    return res.status(400).json({ error: '没有可用的 API Key 配置' });
+  }
+
+  const sharedKey = apiKeys.length > 0 ? apiKeys[0].key : 'sk-xxxxxxxx';
+  const port = process.env.PORT || 9999;
+  const modelNames = apiKeys.map(k => k.name);
+
+  // 6 个模型槽位：不足则循环重复，超出则取前 6 个
+  const modelSlots = [
+    'ANTHROPIC_MODEL',
+    'ANTHROPIC_SMALL_FAST_MODEL',
+    'ANTHROPIC_DEFAULT_HAIKU_MODEL',
+    'ANTHROPIC_DEFAULT_SONNET_MODEL',
+    'ANTHROPIC_DEFAULT_OPUS_MODEL',
+    'CLAUDE_CODE_SUBAGENT_MODEL'
+  ];
+
+  const filledModels = {};
+  modelSlots.forEach((slot, i) => {
+    filledModels[slot] = modelNames[i % modelNames.length];
+  });
+
+  const settings = {
+    env: {
+      ANTHROPIC_AUTH_TOKEN: sharedKey,
+      ANTHROPIC_BASE_URL: `http://localhost:${port}/api/proxy/anthropic`,
+      ...filledModels
+    },
+    theme: 'dark'
+  };
+
+  const fs = require('fs');
+  const path = require('path');
+  const settingsPath = path.join(__dirname, '..', 'settings.json');
+
+  try {
+    fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2), 'utf-8');
+    res.json({ message: 'settings.json 已生成', path: settingsPath, settings });
+  } catch (err) {
+    res.status(500).json({ error: '文件写入失败', details: err.message });
+  }
+});
+
 // 删除模型配置
 router.delete('/:id', (req, res) => {
   const model = db.get('models').find({ id: req.params.id }).value();

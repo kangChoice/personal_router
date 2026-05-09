@@ -3,3 +3,5 @@ db.json
 .env
 *.log
 .claude/
+
+settings.json

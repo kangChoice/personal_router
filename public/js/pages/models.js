@@ -3,7 +3,10 @@ App.Pages.models = async function (container) {
   container.innerHTML = `
     <div class="page-header">
       <h2>模型管理</h2>
-      <button class="btn btn-primary" id="add-model-btn">+ 添加模型</button>
+      <div class="btn-group">
+        <button class="btn btn-secondary" id="generate-settings-btn">生成 settings.json</button>
+        <button class="btn btn-primary" id="add-model-btn">+ 添加模型</button>
+      </div>
     </div>
     <div class="table-wrap" id="models-table-wrap">
       <div class="loading">加载中...</div>
@@ -11,6 +14,7 @@ App.Pages.models = async function (container) {
   `;
 
   document.getElementById('add-model-btn').onclick = () => showModelForm();
+  document.getElementById('generate-settings-btn').onclick = () => generateSettings();
 
   await renderModelTable();
 };
@@ -155,4 +159,26 @@ function showModelForm(existing) {
       await renderModelTable();
     } catch (e) { App.util.showToast('操作失败: ' + e.message, 'error'); }
   });
+}
+
+async function generateSettings() {
+  try {
+    const result = await App.api.post('/api/models/generate-settings');
+    const { overlay, close } = App.util.showModal(`
+      <div class="modal-header">
+        <h3>settings.json 已生成</h3>
+        <button class="modal-close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p>文件已保存到项目根目录：<code>${App.util.escapeHtml(result.path)}</code></p>
+        <pre style="background:var(--bg);padding:12px;border-radius:4px;max-height:400px;overflow:auto;font-size:0.8rem;">${App.util.escapeHtml(JSON.stringify(result.settings, null, 2))}</pre>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-primary close-btn">关闭</button>
+      </div>
+    `, { wide: true });
+    overlay.querySelector('.close-btn')?.addEventListener('click', close);
+  } catch (e) {
+    App.util.showToast('生成失败: ' + e.message, 'error');
+  }
 }

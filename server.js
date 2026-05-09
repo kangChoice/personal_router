@@ -38,6 +38,17 @@ if (allKeys.length > 1) {
   }
 }
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`Model Hub 服务已启动：http://localhost:${PORT}`);
+});
+
+// 热重载兼容：收到退出信号时关闭 server，释放端口
+['SIGTERM', 'SIGINT'].forEach(signal => {
+  process.on(signal, () => {
+    console.log(`收到 ${signal}，正在关闭服务...`);
+    server.close(() => {
+      console.log('服务已关闭');
+      process.exit(0);
+    });
+  });
 });

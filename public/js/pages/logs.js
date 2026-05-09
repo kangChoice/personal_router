@@ -140,7 +140,7 @@ async function renderLogs(offset) {
     wrap.innerHTML = `
       <table>
         <thead><tr>
-          <th>时间</th><th>本地模型</th><th>远程模型</th><th>上游地址</th><th>状态码</th><th>结果</th><th>请求大小</th><th>耗时</th>
+          <th>时间</th><th>本地模型</th><th>远程模型</th><th>上游地址</th><th>状态码</th><th>结果</th><th>输入Token</th><th>输出Token</th><th>耗时</th>
         </tr></thead>
         <tbody>${data.logs.map(l => `
           <tr>
@@ -152,7 +152,8 @@ async function renderLogs(offset) {
             <td>${l.success
               ? '<span class="badge badge-success">成功</span>'
               : '<span class="badge badge-danger">失败</span>'}</td>
-            <td>${App.util.formatBytes(l.requestSize)}</td>
+            <td>${l.inputTokens ? l.inputTokens.toLocaleString() : '-'}</td>
+            <td>${l.outputTokens ? l.outputTokens.toLocaleString() : '-'}</td>
             <td>${App.util.formatDuration(l.duration)}</td>
           </tr>
         `).join('')}</tbody>

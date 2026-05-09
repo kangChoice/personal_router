@@ -17,7 +17,7 @@ function chinaTimeISO() {
   return local.toISOString().replace('Z', '+08:00');
 }
 
-function logRequest({ apiKey, modelId, localModelName, remoteModelName, upstreamUrl, endpoint, method, statusCode, success, duration, requestSize, responseSize, errorMessage }) {
+function logRequest({ apiKey, modelId, localModelName, remoteModelName, upstreamUrl, endpoint, method, statusCode, success, duration, requestSize, responseSize, inputTokens, outputTokens, errorMessage }) {
   if (!apiKey) return;
   db.get('logs').push({
     id: uuidv4(),
@@ -34,6 +34,8 @@ function logRequest({ apiKey, modelId, localModelName, remoteModelName, upstream
     duration,
     requestSize,
     responseSize: responseSize || 0,
+    inputTokens: inputTokens || 0,
+    outputTokens: outputTokens || 0,
     errorMessage,
     createdAt: chinaTimeISO()
   }).write();
@@ -533,11 +535,64 @@ async function streamOpenAIPassthrough(upstreamRes, clientRes) {
   clientRes.setHeader('Connection', 'keep-alive');
   clientRes.setHeader('X-Accel-Buffering', 'no');
 
-  return new Promise((resolve, reject) => {
-    upstreamRes.body.pipe(clientRes);
-    upstreamRes.body.on('end', resolve);
-    upstreamRes.body.on('error', reject);
+  let inputTokens = 0;
+  let outputTokens = 0;
+
+  const rl = readline.createInterface({
+    input: upstreamRes.body,
+    crlfDelay: Infinity
   });
+
+  for await (const line of rl) {
+    clientRes.write(line + '\n');
+    if (line.startsWith('data: ')) {
+      const data = line.slice(6).trim();
+      if (data && data !== '[DONE]') {
+        try {
+          const chunk = JSON.parse(data);
+          if (chunk.usage) {
+            if (chunk.usage.prompt_tokens) inputTokens = chunk.usage.prompt_tokens;
+            if (chunk.usage.completion_tokens) outputTokens = chunk.usage.completion_tokens;
+          }
+        } catch {}
+      }
+    }
+  }
+  clientRes.end();
+  return { inputTokens, outputTokens };
+}
+
+async function streamAnthropicPassthrough(upstreamRes, clientRes) {
+  clientRes.setHeader('Content-Type', 'text/event-stream');
+  clientRes.setHeader('Cache-Control', 'no-cache');
+  clientRes.setHeader('Connection', 'keep-alive');
+  clientRes.setHeader('X-Accel-Buffering', 'no');
+
+  let inputTokens = 0;
+  let outputTokens = 0;
+
+  const rl = readline.createInterface({
+    input: upstreamRes.body,
+    crlfDelay: Infinity
+  });
+
+  for await (const line of rl) {
+    clientRes.write(line + '\n');
+    if (line.startsWith('data: ')) {
+      const data = line.slice(6).trim();
+      if (data) {
+        try {
+          const chunk = JSON.parse(data);
+          // Anthropic SSE: message_start has message.usage.input_tokens
+          if (chunk.message?.usage?.input_tokens) inputTokens = chunk.message.usage.input_tokens;
+          // Anthropic SSE: message_delta has usage.output_tokens
+          if (chunk.usage?.output_tokens) outputTokens = chunk.usage.output_tokens;
+        } catch {}
+      }
+    }
+  }
+  clientRes.end();
+  return { inputTokens, outputTokens };
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -587,7 +642,7 @@ router.post('/chat/completions', async (req, res) => {
 
     // 流式响应
     if (req.body.stream) {
-      await streamOpenAIPassthrough(upstreamRes, res);
+      const tokens = await streamOpenAIPassthrough(upstreamRes, res);
       logRequest({
         apiKey: req.apiKey, modelId: model.id,
         localModelName: model.name, remoteModelName: model.modelName,
@@ -595,7 +650,9 @@ router.post('/chat/completions', async (req, res) => {
         endpoint: '/chat/completions', method: 'POST',
         statusCode: 200, success: true,
         duration: Date.now() - startTime,
-        requestSize: Buffer.byteLength(requestBody)
+        requestSize: Buffer.byteLength(requestBody),
+        inputTokens: tokens.inputTokens,
+        outputTokens: tokens.outputTokens
       });
       incrementQuota(req.apiKey);
       return;
@@ -612,7 +669,9 @@ router.post('/chat/completions', async (req, res) => {
       statusCode: upstreamRes.status, success: true,
       duration: Date.now() - startTime,
       requestSize: Buffer.byteLength(requestBody),
-      responseSize: Buffer.byteLength(JSON.stringify(data))
+      responseSize: Buffer.byteLength(JSON.stringify(data)),
+      inputTokens: data.usage?.prompt_tokens || 0,
+      outputTokens: data.usage?.completion_tokens || 0
     });
     incrementQuota(req.apiKey);
 
@@ -695,23 +754,19 @@ router.post('/anthropic/v1/messages', async (req, res) => {
 
     // 流式透传
     if (req.body.stream) {
-      res.setHeader('Content-Type', 'text/event-stream');
-      res.setHeader('Cache-Control', 'no-cache');
-      res.setHeader('Connection', 'keep-alive');
-      res.setHeader('X-Accel-Buffering', 'no');
-      upstreamRes.body.pipe(res);
-      upstreamRes.body.on('end', () => {
-        logRequest({
-          apiKey: req.apiKey, modelId: model.id,
-          localModelName: model.name, remoteModelName: model.modelName,
-          upstreamUrl: `${model.baseUrl}/v1/messages`,
-          endpoint: '/anthropic/v1/messages', method: 'POST',
-          statusCode: 200, success: true,
-          duration: Date.now() - startTime,
-          requestSize: Buffer.byteLength(requestBody)
-        });
-        incrementQuota(req.apiKey);
+      const tokens = await streamAnthropicPassthrough(upstreamRes, res);
+      logRequest({
+        apiKey: req.apiKey, modelId: model.id,
+        localModelName: model.name, remoteModelName: model.modelName,
+        upstreamUrl: `${model.baseUrl}/v1/messages`,
+        endpoint: '/anthropic/v1/messages', method: 'POST',
+        statusCode: 200, success: true,
+        duration: Date.now() - startTime,
+        requestSize: Buffer.byteLength(requestBody),
+        inputTokens: tokens.inputTokens,
+        outputTokens: tokens.outputTokens
       });
+      incrementQuota(req.apiKey);
       return;
     }
 
@@ -726,7 +781,9 @@ router.post('/anthropic/v1/messages', async (req, res) => {
       statusCode: upstreamRes.status, success: true,
       duration: Date.now() - startTime,
       requestSize: Buffer.byteLength(requestBody),
-      responseSize: Buffer.byteLength(JSON.stringify(data))
+      responseSize: Buffer.byteLength(JSON.stringify(data)),
+      inputTokens: data.usage?.input_tokens || 0,
+      outputTokens: data.usage?.output_tokens || 0
     });
     incrementQuota(req.apiKey);
 
@@ -807,7 +864,7 @@ router.post('/*', async (req, res) => {
 
     // 流式透传
     if (typeof req.body === 'object' && req.body !== null && req.body.stream) {
-      upstreamRes.body.pipe(res);
+      const tokens = await streamOpenAIPassthrough(upstreamRes, res);
       logRequest({
         apiKey: req.apiKey, modelId: model.id,
         localModelName: model.name, remoteModelName: model.modelName,
@@ -815,7 +872,9 @@ router.post('/*', async (req, res) => {
         endpoint: `/${path}`, method: 'POST',
         statusCode: 200, success: true,
         duration: Date.now() - startTime,
-        requestSize: Buffer.byteLength(requestBody)
+        requestSize: Buffer.byteLength(requestBody),
+        inputTokens: tokens.inputTokens,
+        outputTokens: tokens.outputTokens
       });
       incrementQuota(req.apiKey);
       return;
@@ -831,7 +890,9 @@ router.post('/*', async (req, res) => {
       statusCode: upstreamRes.status, success: true,
       duration: Date.now() - startTime,
       requestSize: Buffer.byteLength(requestBody),
-      responseSize: Buffer.byteLength(JSON.stringify(data))
+      responseSize: Buffer.byteLength(JSON.stringify(data)),
+      inputTokens: data.usage?.prompt_tokens || data.usage?.input_tokens || 0,
+      outputTokens: data.usage?.completion_tokens || data.usage?.output_tokens || 0
     });
     incrementQuota(req.apiKey);
 
