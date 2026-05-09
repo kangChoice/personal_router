@@ -16,7 +16,7 @@ App.Pages.logs = async function (container) {
       </div>
       <div class="filter-group">
         <label>本地模型</label>
-        <select id="filter-local-model"><option value="">全部</option></select>
+        <select id="filter-api-key"><option value="">全部</option></select>
       </div>
       <div class="filter-group">
         <label>远程模型</label>
@@ -70,7 +70,7 @@ async function clearLogs() {
 function resetFilters() {
   document.getElementById('filter-start-date').value = '';
   document.getElementById('filter-end-date').value = '';
-  document.getElementById('filter-local-model').value = '';
+  document.getElementById('filter-api-key').value = '';
   document.getElementById('filter-remote-model').value = '';
   document.getElementById('filter-success').value = '';
   document.getElementById('filter-limit').value = '50';
@@ -83,12 +83,13 @@ async function populateLogFilters() {
     const models = await App.api.get('/api/models');
     App.state.modelsCache = models;
 
-    // Local model names (model config name)
-    const localSel = document.getElementById('filter-local-model');
-    models.forEach(m => {
+    // API key names (本地模型标识)
+    const localSel = document.getElementById('filter-api-key');
+    const keys = await App.api.get('/api/keys');
+    keys.forEach(k => {
       const opt = document.createElement('option');
-      opt.value = m.name;
-      opt.textContent = m.name;
+      opt.value = k.name;
+      opt.textContent = k.name;
       localSel.appendChild(opt);
     });
 
@@ -114,7 +115,7 @@ async function renderLogs(offset) {
 
   const startDate = document.getElementById('filter-start-date').value;
   const endDate = document.getElementById('filter-end-date').value;
-  const localModelName = document.getElementById('filter-local-model').value;
+  const apiKeyName = document.getElementById('filter-api-key').value;
   const remoteModelName = document.getElementById('filter-remote-model').value;
   const success = document.getElementById('filter-success').value;
   const limit = document.getElementById('filter-limit').value;
@@ -122,7 +123,7 @@ async function renderLogs(offset) {
   const params = new URLSearchParams();
   if (startDate) params.set('startDate', startDate + 'T00:00:00.000+08:00');
   if (endDate) params.set('endDate', endDate + 'T23:59:59.999+08:00');
-  if (localModelName) params.set('localModelName', localModelName);
+  if (apiKeyName) params.set('apiKeyName', apiKeyName);
   if (remoteModelName) params.set('remoteModelName', remoteModelName);
   if (success) params.set('success', success);
   params.set('limit', limit);
@@ -145,15 +146,15 @@ async function renderLogs(offset) {
         <tbody>${data.logs.map(l => `
           <tr>
             <td style="white-space:nowrap">${App.util.formatDate(l.createdAt)}</td>
-            <td>${App.util.escapeHtml(l.localModelName || '-')}</td>
+            <td>${App.util.escapeHtml(l.apiKeyName || '-')}</td>
             <td class="mono">${App.util.escapeHtml(l.remoteModelName || '-')}</td>
             <td class="mono" style="max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${App.util.escapeHtml(l.upstreamUrl || '')}">${App.util.escapeHtml(l.upstreamUrl || '-')}</td>
             <td>${l.statusCode}</td>
             <td>${l.success
               ? '<span class="badge badge-success">成功</span>'
               : '<span class="badge badge-danger">失败</span>'}</td>
-            <td>${l.inputTokens ? l.inputTokens.toLocaleString() : '-'}</td>
-            <td>${l.outputTokens ? l.outputTokens.toLocaleString() : '-'}</td>
+            <td>${App.util.formatTokens(l.inputTokens)}</td>
+            <td>${App.util.formatTokens(l.outputTokens)}</td>
             <td>${App.util.formatDuration(l.duration)}</td>
           </tr>
         `).join('')}</tbody>

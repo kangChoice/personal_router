@@ -41,23 +41,19 @@ App.Pages.settings = async function (container) {
 
   const pathInput = document.getElementById('settings-path');
 
-  // Save path on change
   pathInput.addEventListener('change', () => {
     localStorage.setItem('claude-settings-path', pathInput.value.trim());
   });
 
-  // Reset to default path
   document.getElementById('reset-path-btn').addEventListener('click', () => {
     pathInput.value = defaultPath;
     localStorage.setItem('claude-settings-path', defaultPath);
   });
 
-  // Generate button
   document.getElementById('generate-btn').addEventListener('click', async () => {
     const filePath = pathInput.value.trim() || defaultPath;
     localStorage.setItem('claude-settings-path', filePath);
 
-    // Show loading
     const btn = document.getElementById('generate-btn');
     btn.disabled = true;
     btn.textContent = '生成中...';
@@ -91,16 +87,13 @@ App.Pages.settings = async function (container) {
         </div>
       `, { wide: true });
 
-      // Copy button
       document.getElementById('copy-btn').addEventListener('click', async () => {
         await App.util.copyToClipboard(jsonStr);
         App.util.showToast('已复制到剪贴板', 'success');
       });
 
-      // Close button
       document.querySelector('.close-btn').addEventListener('click', close);
 
-      // Overwrite button
       document.getElementById('overwrite-btn').addEventListener('click', async () => {
         const confirmed = await App.util.showConfirm(
           '覆盖确认',

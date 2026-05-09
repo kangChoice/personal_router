@@ -24,13 +24,13 @@ router.get('/', (req, res) => {
 
 // 日志查询端点（必须在 /:id 之前，否则 "logs" 会被当作 :id）
 router.get('/logs', (req, res) => {
-  const { localModelName, remoteModelName, success, startDate, endDate, limit = 100, offset = 0 } = req.query;
+  const { apiKeyName, remoteModelName, success, startDate, endDate, limit = 100, offset = 0 } = req.query;
 
   // 取出所有日志为普通数组，用纯 JS 过滤，避免 lowdb/lodash 链式 filter 兼容问题
   let logs = db.get('logs').value();
 
-  if (localModelName) {
-    logs = logs.filter(l => l.localModelName === localModelName);
+  if (apiKeyName) {
+    logs = logs.filter(l => l.apiKeyName === apiKeyName);
   }
   if (remoteModelName) {
     logs = logs.filter(l => l.remoteModelName === remoteModelName);

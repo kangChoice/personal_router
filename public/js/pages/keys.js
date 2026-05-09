@@ -5,7 +5,7 @@ App.Pages.keys = async function (container) {
       <h2>本地模型管理</h2>
       <div class="btn-group">
         <button class="btn btn-secondary" id="shared-key-btn">查询共享密钥</button>
-        <button class="btn btn-primary" id="add-key-btn">+ 生成密钥</button>
+        <button class="btn btn-primary" id="add-key-btn">+ 自定义模型</button>
       </div>
     </div>
     <div id="keys-stats-panel"></div>
@@ -116,18 +116,18 @@ async function renderKeyTable() {
     });
     wrap.querySelectorAll('.delete-key-btn').forEach(btn => {
       btn.onclick = async () => {
-        const ok = await App.util.showConfirm('删除密钥', `确定删除密钥「${btn.dataset.id}」吗？此操作不可撤销，使用此密钥的客户端将立即无法访问。`);
+        const ok = await App.util.showConfirm('删除自定模型', `确定删除自定模型「${btn.dataset.id}」吗？此操作不可撤销，使用此自定模型的客户端将立即无法访问。`);
         if (!ok) return;
         try {
           await App.api.del('/api/keys/' + btn.dataset.id);
-          App.util.showToast('密钥已删除', 'success');
+          App.util.showToast('自定模型已删除', 'success');
           await renderKeyTable();
         } catch (e) { App.util.showToast('删除失败: ' + e.message, 'error'); }
       };
     });
     wrap.querySelectorAll('.reset-key-btn').forEach(btn => {
       btn.onclick = async () => {
-        const ok = await App.util.showConfirm('重置配额', '确定将此密钥的已使用配额清零吗？');
+        const ok = await App.util.showConfirm('重置配额', '确定将此自定模型的已使用配额清零吗？');
         if (!ok) return;
         try {
           await App.api.post('/api/keys/' + btn.dataset.id + '/reset-quota');
@@ -160,7 +160,7 @@ async function showKeyStats(keyId) {
     panel.innerHTML = `
       <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px;margin-bottom:20px;">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
-          <h3 style="font-size:1rem;">密钥统计：${App.util.escapeHtml(keyRecord.name || keyId)}</h3>
+          <h3 style="font-size:1rem;">自定义模型统计：${App.util.escapeHtml(keyRecord.name || keyId)}</h3>
           <button class="btn btn-secondary btn-sm" id="close-stats-btn">关闭</button>
         </div>
         <div class="stats-grid">
@@ -184,11 +184,7 @@ async function showKeyStats(keyId) {
             <div class="stat-label">请求流量</div>
             <div class="stat-value">${App.util.formatBytes(stats.totalRequestSize)}</div>
           </div>
-          <div class="stat-card">
-            <div class="stat-label">响应流量</div>
-            <div class="stat-value">${App.util.formatBytes(stats.totalResponseSize)}</div>
-          </div>
-          <div class="stat-card">
+<div class="stat-card">
             <div class="stat-label">输入 Token</div>
             <div class="stat-value">${stats.totalInputTokens.toLocaleString()}</div>
           </div>
@@ -215,7 +211,7 @@ async function showKeyStats(keyId) {
 
 async function showKeyForm(existing) {
   const isEdit = !!existing;
-  const title = isEdit ? '编辑 API 密钥' : '生成 API 密钥';
+  const title = isEdit ? '编辑本地模型' : '创建本地模型';
 
   // Need models list for the selector
   let models = App.state.modelsCache;
@@ -299,7 +295,7 @@ async function showKeyForm(existing) {
       if (isEdit) {
         if (enabledCheckbox) body.enabled = enabledCheckbox.checked;
         await App.api.put('/api/keys/' + existing.id, body);
-        App.util.showToast('密钥已更新', 'success');
+        App.util.showToast('本地模型配置已更新', 'success');
         close();
         await renderKeyTable();
       } else {

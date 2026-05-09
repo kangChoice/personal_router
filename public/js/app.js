@@ -50,6 +50,12 @@ App.util = {
     return (n / (1024 * 1024)).toFixed(1) + ' MB';
   },
 
+  formatTokens(n) {
+    if (!n) return '-';
+    if (n < 10000) return n.toLocaleString();
+    return (n / 10000).toFixed(1) + '万';
+  },
+
   formatDuration(ms) {
     if (!ms) return '0ms';
     if (ms < 1000) return ms + 'ms';
@@ -120,7 +126,6 @@ App.util = {
         overlay.remove();
         resolve(true);
       };
-      overlay.onclick = (e) => { if (e.target === overlay) { overlay.remove(); resolve(false); } };
     });
   },
 
@@ -135,9 +140,6 @@ App.util = {
 
     const close = () => overlay.remove();
     overlay.querySelector('.modal-close')?.addEventListener('click', close);
-    overlay.addEventListener('click', (e) => {
-      if (e.target === overlay) close();
-    });
     return { overlay, close };
   }
 };
