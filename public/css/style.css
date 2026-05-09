@@ -569,3 +569,40 @@ input:focus-visible, select:focus-visible, textarea:focus-visible {
   .filters-bar { flex-direction: column; }
   .stats-grid { grid-template-columns: repeat(2, 1fr); }
 }
+
+/* ---- Provider Quick Create ---- */
+.provider-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 12px;
+}
+.provider-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.provider-card:hover {
+  border-color: var(--primary);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+}
+.provider-card .provider-name {
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+.provider-card .provider-desc {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+}
+.provider-card .provider-url {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+@media (max-width: 768px) {
+  .provider-grid { grid-template-columns: 1fr; }
+}

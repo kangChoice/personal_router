@@ -3,7 +3,10 @@ App.Pages.models = async function (container) {
   container.innerHTML = `
     <div class="page-header">
       <h2>远程模型管理</h2>
-      <button class="btn btn-primary" id="add-model-btn">+ 添加模型</button>
+      <div class="btn-group">
+        <button class="btn btn-secondary" id="quick-create-btn">快捷创建</button>
+        <button class="btn btn-primary" id="add-model-btn">+ 添加模型</button>
+      </div>
     </div>
     <div class="table-wrap" id="models-table-wrap">
       <div class="loading">加载中...</div>
@@ -11,6 +14,7 @@ App.Pages.models = async function (container) {
   `;
 
   document.getElementById('add-model-btn').onclick = () => showModelForm();
+  document.getElementById('quick-create-btn').onclick = () => showQuickCreate();
 
   await renderModelTable();
 };
@@ -89,9 +93,53 @@ App.Pages._toggleKey = function (el) {
   }
 };
 
-function showModelForm(existing) {
+function showQuickCreate() {
+  const providers = [
+    { name: '阿里云百炼 (Alibaba)', baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1', desc: '通义千问系列模型' },
+    { name: 'DeepSeek', baseUrl: 'https://api.deepseek.com', desc: 'DeepSeek-V3, DeepSeek-R1 等' },
+    { name: 'OpenAI', baseUrl: 'https://api.openai.com', desc: 'GPT-4o, GPT-4.1 等' },
+    { name: '智谱 (Zhipu)', baseUrl: 'https://open.bigmodel.cn/api/paas/v4', desc: 'GLM-4 系列模型' },
+    { name: '月之暗面 (Moonshot)', baseUrl: 'https://api.moonshot.cn/v1', desc: 'Kimi 系列模型' },
+    { name: '硅基流动 (SiliconFlow)', baseUrl: 'https://api.siliconflow.cn/v1', desc: 'DeepSeek, Qwen 等开源模型' },
+  ];
+
+  const { overlay, close } = App.util.showModal(`
+    <div class="modal-header">
+      <h3>快捷创建 - 选择厂商</h3>
+      <button class="modal-close">&times;</button>
+    </div>
+    <div class="modal-body">
+      <p style="color:var(--text-secondary);margin-bottom:16px;">选择厂商后只需填写 <strong>模型名称</strong> 和 <strong>API 密钥</strong> 即可</p>
+      <div class="provider-grid">
+        ${providers.map((p, i) => `
+          <div class="provider-card" data-index="${i}">
+            <div class="provider-name">${App.util.escapeHtml(p.name)}</div>
+            <div class="provider-desc">${App.util.escapeHtml(p.desc)}</div>
+            <div class="provider-url mono">${App.util.escapeHtml(p.baseUrl)}</div>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary close-btn">取消</button>
+    </div>
+  `, { wide: true });
+
+  overlay.querySelector('.close-btn')?.addEventListener('click', close);
+  overlay.querySelectorAll('.provider-card').forEach(card => {
+    card.addEventListener('click', () => {
+      const p = providers[parseInt(card.dataset.index)];
+      close();
+      showModelForm(null, { baseUrl: p.baseUrl, providerName: p.name });
+    });
+  });
+}
+
+function showModelForm(existing, preset) {
   const isEdit = !!existing;
-  const title = isEdit ? '编辑模型配置' : '添加模型配置';
+  const title = isEdit ? '编辑模型配置' : (preset ? `快捷创建 - ${preset.providerName}` : '添加模型配置');
+  const defaultBaseUrl = preset?.baseUrl || existing?.baseUrl || '';
+  const defaultName = existing?.name || '';
   const { overlay, close } = App.util.showModal(`
     <div class="modal-header">
       <h3>${title}</h3>
@@ -100,7 +148,7 @@ function showModelForm(existing) {
     <div class="modal-body">
       <div class="form-group">
         <label>名称 *</label>
-        <input type="text" id="form-name" placeholder="例如: OpenAI GPT-4" value="${App.util.escapeHtml(existing?.name || '')}">
+        <input type="text" id="form-name" placeholder="${preset ? '例如: 通义千问-Qwen-Max' : '例如: OpenAI GPT-4'}" value="${App.util.escapeHtml(defaultName)}">
       </div>
       <div class="form-group">
         <label>API 密钥 *</label>
@@ -109,7 +157,7 @@ function showModelForm(existing) {
       </div>
       <div class="form-group">
         <label>请求地址 (Base URL) *</label>
-        <input type="url" id="form-baseurl" placeholder="https://api.openai.com" value="${App.util.escapeHtml(existing?.baseUrl || '')}">
+        <input type="url" id="form-baseurl" placeholder="https://api.openai.com" value="${App.util.escapeHtml(defaultBaseUrl)}" ${preset ? 'readonly style="background:var(--bg);color:var(--text-secondary)"' : ''}>
       </div>
       <div class="form-group">
         <label>模型名称 (Model Name)</label>
